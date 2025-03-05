@@ -41,3 +41,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 添加 Flutter 的临时文件目录
+/android/gradle/wrapper/gradle-wrapper.properties
