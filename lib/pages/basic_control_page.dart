@@ -41,6 +41,14 @@ class _BasicControlPageState extends State<BasicControlPage> {
       final services = await widget.device.discoverServices()
           .timeout(const Duration(seconds: 5));
 
+      // 打印所有发现的服务和特征
+      for (var service in services) {
+        debugPrint('发现服务: ${service.uuid}');
+        for (var characteristic in service.characteristics) {
+          debugPrint('发现特征: ${characteristic.uuid}');
+        }
+      }
+
       // 查找目标服务
       final targetService = services.firstWhere(
             (s) => s.uuid.toString().toLowerCase() == widget.serviceUUID.toLowerCase(),
@@ -53,9 +61,23 @@ class _BasicControlPageState extends State<BasicControlPage> {
         orElse: () => throw Exception('找不到特征: ${widget.characteristicUUID}'),
       );
 
-      // 验证写入权限
-      if (!_controlChar!.properties.write) {
-        throw Exception('特征不可写');
+      // 验证特征值属性
+      if (!_controlChar!.properties.read) {
+        debugPrint('特征值不支持 READ 操作');
+        if (_controlChar!.properties.notify) {
+          debugPrint('特征值支持 NOTIFY 操作');
+          await _controlChar!.setNotifyValue(true);
+          _controlChar!.value.listen((value) {
+            String hexValue = value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join(' ');
+            debugPrint('通过 NOTIFY 读取到的 HEX 值: $hexValue');
+            _showMessage('通过 NOTIFY 读取到的 HEX 值: $hexValue', Colors.blue);
+          });
+        } else {
+          throw Exception('特征值不支持 READ 或 NOTIFY 操作');
+        }
+      } else {
+        // 如果支持 READ 操作，直接读取
+        _readCharacteristic();
       }
 
       // 设置连接监听
@@ -75,6 +97,36 @@ class _BasicControlPageState extends State<BasicControlPage> {
       _showError(e.toString());
       if (mounted) Navigator.pop(context);
     }
+  }
+
+
+  Future<void> _readCharacteristic() async {
+    if (_controlChar == null) return;
+
+    try {
+      // 读取特征值
+      List<int> value = await _controlChar!.read();
+      // 转换为 HEX 字符串
+      String hexValue = value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join(' ');
+      debugPrint('读取到的 HEX 值: $hexValue');
+
+      // 显示 HEX 值的提示消息
+      _showMessage('读取到的 HEX 值: $hexValue', Colors.blue);
+    } catch (e) {
+      debugPrint('读取特征值失败: $e');
+      _showError('读取特征值失败: $e');
+    }
+  }
+
+  void _showMessage(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _sendSpeedCommand(double speed) async {

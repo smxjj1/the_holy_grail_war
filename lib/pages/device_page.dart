@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'basic_control_page.dart';
+import 'more_features_page.dart';
 
 class DevicePage extends StatefulWidget {
   const DevicePage({Key? key}) : super(key: key);
@@ -109,6 +110,7 @@ class _DevicePageState extends State<DevicePage> {
       }
     });
   }
+
 
   Future<void> _disconnectDevice() async {
     if (_connectedDevice != null) {
@@ -299,8 +301,8 @@ class _DevicePageState extends State<DevicePage> {
                 MaterialPageRoute(
                   builder: (_) => BasicControlPage(
                     device: _connectedDevice!,
-                    serviceUUID: "0000ffe0-0000-1000-8000-00805f9b34fb",
-                    characteristicUUID: "0000ffe1-0000-1000-8000-00805f9b34fb",
+                    serviceUUID: "5052494d-2dab-0341-6972-6f6861424c45",
+                    characteristicUUID: "43484152-2dab-3241-6972-6f6861424c45",
                   ),
                 ),
               );
@@ -310,9 +312,16 @@ class _DevicePageState extends State<DevicePage> {
           },
         ),
         _buildFeatureItem(
-          title: '更多功能',
-          icon: Icons.more_horiz,
-          onTap: () => _showMessage('功能开发中', Colors.blue),
+            title: '更多功能',
+            icon: Icons.more_horiz,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MoreFeaturesPage(), // 导航到 MoreFeaturesPage
+                ),
+              );
+            }
         ),
       ],
     );
