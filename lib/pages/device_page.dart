@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'basic_control_page.dart';
@@ -13,7 +12,7 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-  BluetoothDevice? _connectedDevice;
+  ConnectedDevice? _connectedDevice; // 修改为 ConnectedDevice?
   final List<BluetoothDevice> _discoveredDevices = [];
   bool _isScanning = false;
   StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
@@ -86,12 +85,45 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
+  // 在DevicePage的_connectDevice方法中修改
   Future<void> _connectDevice(BluetoothDevice device) async {
     try {
       await device.connect();
+
+      // 获取并存储MTU值
+      int negotiatedMtu = await device.requestMtu(512);
+      debugPrint('协商后的MTU: $negotiatedMtu');
+      // 发现服务
+      final List<BluetoothService> services = await device.discoverServices();
+      // 查找第一个可写特征
+      BluetoothCharacteristic? targetChar;
+      for (final service in services) {
+        final candidates = service.characteristics.where((c) {
+          return c.properties.write || c.properties.writeWithoutResponse;
+        });
+        if (candidates.isNotEmpty) {
+          targetChar = candidates.first;
+          break;
+        }
+      }
+
+      if (targetChar == null) {
+        throw Exception('未找到可写特征');
+      }
+
+      // 将设备包装为包含MTU的对象
+      ConnectedDevice connectedDevice = ConnectedDevice(device, negotiatedMtu, targetChar);
+
+      // 更新状态
+      if (mounted) {
+        setState(() => _connectedDevice = connectedDevice);
+      }
+      // 将设备包装为包含MTU的对象
+      // ConnectedDevice connectedDevice = ConnectedDevice(device, negotiatedMtu);
+
       _setupConnectionListener(device);
       if (mounted) {
-        setState(() => _connectedDevice = device);
+        setState(() => _connectedDevice = connectedDevice); // 设置为 ConnectedDevice
       }
       if (Navigator.canPop(context)) Navigator.pop(context);
       _showSuccess('已连接 ${device.platformName}');
@@ -99,6 +131,8 @@ class _DevicePageState extends State<DevicePage> {
       _showError('连接失败: $e');
     }
   }
+
+
 
   void _setupConnectionListener(BluetoothDevice device) {
     _connectionSub?.cancel();
@@ -111,11 +145,11 @@ class _DevicePageState extends State<DevicePage> {
     });
   }
 
-
   Future<void> _disconnectDevice() async {
     if (_connectedDevice != null) {
       try {
-        await _connectedDevice!.disconnect();
+        // 原错误代码：await _connectedDevice!.disconnect();
+        await _connectedDevice!.device.disconnect(); // 通过 device 属性调用
         setState(() => _connectedDevice = null);
         _showDisconnectSnackBar();
       } catch (e) {
@@ -206,7 +240,6 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
-  // 提示消息方法
   void _showError(String msg) => _showMessage(msg, Colors.red);
   void _showSuccess(String msg) => _showMessage(msg, Colors.green);
 
@@ -294,38 +327,61 @@ class _DevicePageState extends State<DevicePage> {
         _buildFeatureItem(
           title: '基础控制',
           icon: Icons.speed,
-          onTap: () {
-            if (_connectedDevice?.isConnected ?? false) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BasicControlPage(
-                    device: _connectedDevice!,
-                    serviceUUID: "5052494d-2dab-0341-6972-6f6861424c45",
-                    characteristicUUID: "43484152-2dab-3241-6972-6f6861424c45",
+          onTap: () async {
+            if (_connectedDevice?.device.isConnected ?? false) { // 检查设备是否连接
+              try {
+                final services = await _connectedDevice!.device.discoverServices();
+                BluetoothCharacteristic? targetChar;
+
+                for (var service in services) {
+                  final candidates = service.characteristics.where((c) {
+                    return c.properties.write || c.properties.writeWithoutResponse;
+                  });
+                  if (candidates.isNotEmpty) {
+                    targetChar = candidates.first;
+                    break;
+                  }
+                }
+
+                if (targetChar == null) {
+                  _showError('未找到可写特征');
+                  return;
+                }
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => BasicControlPage(
+                      connectedDevice: _connectedDevice!, // 传递 ConnectedDevice
+                      characteristic: targetChar!,
+                    ),
                   ),
-                ),
-              );
+                );
+              } catch (e) {
+                _showError('初始化失败: $e');
+              }
             } else {
               _showError('请先连接设备');
             }
           },
         ),
         _buildFeatureItem(
-            title: '更多功能',
-            icon: Icons.more_horiz,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MoreFeaturesPage(), // 导航到 MoreFeaturesPage
-                ),
-              );
-            }
+          title: '更多功能',
+          icon: Icons.more_horiz,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MoreFeaturesPage(),
+              ),
+            );
+          },
         ),
       ],
     );
   }
+
+
 
   Widget _buildFeatureItem({
     required String title,
@@ -383,7 +439,7 @@ class _DevicePageState extends State<DevicePage> {
               borderRadius: BorderRadius.circular(15),
             ),
             child: Text(
-              '当前设备：${_connectedDevice?.platformName ?? "未连接"}',
+              '当前设备：${_connectedDevice?.device.platformName ?? "未连接"}', // 使用 device 属性
               style: const TextStyle(color: Colors.black),
             ),
           ),
@@ -400,6 +456,7 @@ class _DevicePageState extends State<DevicePage> {
       ),
     );
   }
+
 
   Widget _buildControlButton(IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
@@ -426,7 +483,8 @@ class _DevicePageState extends State<DevicePage> {
   void dispose() {
     _adapterStateSub?.cancel();
     _connectionSub?.cancel();
-    _connectedDevice?.disconnect();
+    // 原错误代码：_connectedDevice?.disconnect();
+    _connectedDevice?.device.disconnect(); // 通过 device 属性调用
     super.dispose();
   }
 }
@@ -440,12 +498,10 @@ class _GridPainter extends CustomPainter {
 
     const spacing = 30.0;
 
-    // 绘制垂直网格
     for (var x = 0.0; x < size.width; x += spacing) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
 
-    // 绘制水平网格
     for (var y = 0.0; y < size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
@@ -453,4 +509,13 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// 添加设备包装类
+class ConnectedDevice {
+  final BluetoothDevice device;
+  final int mtu;
+  final BluetoothCharacteristic characteristic;
+
+  ConnectedDevice(this.device, this.mtu, this.characteristic);
 }
