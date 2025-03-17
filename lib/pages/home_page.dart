@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'mystery_page.dart';
 import 'device_page.dart';
 import 'profile_page.dart';
+import 'model_test_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -16,6 +17,7 @@ class _HomePageState extends State<HomePage> {
   final List<Widget> _pages = [
     const MysteryPage(),
     const DevicePage(),
+    const ModelTestPage(),
     const ProfilePage(),
   ];
 
@@ -49,6 +51,10 @@ class _HomePageState extends State<HomePage> {
             BottomNavigationBarItem(
               icon: Icon(Icons.devices),
               label: '设备',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.model_training),
+              label: '模型测试',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person),
